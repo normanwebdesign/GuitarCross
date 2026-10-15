@@ -240,6 +240,31 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;heigh
 .pickgrid button.on{background:var(--accent);border-color:var(--accent);color:#06281a}
 .photowrap{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:#000;position:relative}
 .photowrap img{display:block;margin:0 auto;max-width:none}
+
+/* ---------- photo stage : pinch-zoom, pan, chord pins ---------- */
+.phstage{
+  position:relative;overflow:hidden;border-radius:12px;background:#000;margin-bottom:12px;
+  touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+  border:1px solid var(--line);min-height:140px;
+}
+.phstage:focus{outline:none;border-color:var(--accent)}
+.phcanvas{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+.phcanvas img{display:block;width:100%;height:100%;pointer-events:none;-webkit-user-drag:none}
+.phpins{position:absolute;left:0;top:0;right:0;bottom:0}
+.phpin{
+  position:absolute;transform:translate(-50%,-50%) scale(var(--ipz,1));transform-origin:50% 50%;
+  background:rgba(11,15,20,.9);border:1.5px solid var(--accent);color:var(--accent);
+  font-weight:700;font-size:13.5px;line-height:1;padding:7px 10px;border-radius:999px;
+  white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.55);
+}
+.phpin:active{background:var(--accent);color:#06281a}
+#svPhotos.pinning .phstage{cursor:crosshair}
+#svPhotos.pinning .phpin{opacity:.45}
+.phhint{
+  display:none;margin:0 0 10px;padding:9px 12px;border-radius:11px;font-size:13.5px;font-weight:600;
+  background:rgba(30,217,138,.12);border:1px solid var(--accent);color:var(--accent);
+}
+.phhint.on{display:block}
 .kv{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:14.5px}
 .kv:last-child{border-bottom:0}
 .kv b{font-weight:650}
@@ -378,7 +403,10 @@ function lsSet(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ ret
 function dbLoad(){
   try{const raw=lsGet(LS_KEY); if(!raw)return;
     const o=JSON.parse(raw);
-    if(o.songs)DB.songs=o.songs;
+    if(o.songs){
+      DB.songs=o.songs;
+      DB.songs.forEach(s=>{ s.images=Array.isArray(s.images)?s.images:[]; s.pins=normPins(s.pins,s.images); });
+    }
     if(o.settings)Object.assign(DB.settings,o.settings);
     if(o.recentChords)DB.recentChords=o.recentChords;
   }catch(e){console.warn('load failed',e);}
@@ -1283,12 +1311,26 @@ $('#btnTuningPick').addEventListener('click',()=>{
    SONGS - model helpers
    ================================================================== */
 function newSong(type){
-  return {id:uid(),title:'',artist:'',type:type,key:'',capo:0,text:'',chords:[],images:[],
+  return {id:uid(),title:'',artist:'',type:type,key:'',capo:0,text:'',chords:[],images:[],pins:[],
           transpose:0,fav:false,created:Date.now(),updated:Date.now(),notes:''};
+}
+/* chord pins live on photos in image coordinates (0..1 of width/height) so they
+   survive zooming, rotation and a different screen. Anything malformed is dropped. */
+function normPins(arr,keys){
+  if(!Array.isArray(arr)) return [];
+  const out=[];
+  arr.forEach(p=>{
+    if(!p||typeof p.n!=='string'||!p.n) return;
+    if(keys&&keys.indexOf(p.img)<0) return;
+    p.x=clamp(+p.x||0,0,1); p.y=clamp(+p.y||0,0,1);
+    out.push(p);
+  });
+  return out;
 }
 function getSong(id){ return DB.songs.filter(s=>s.id===id)[0]; }
 function saveSong(s){
   s.updated=Date.now();
+  s.pins=normPins(s.pins,s.images||[]);
   if(DB.songs.indexOf(s)<0) DB.songs.unshift(s);
   dbSave();
 }
@@ -1553,38 +1595,239 @@ function openSongViewer(id){
     const tr=s.transpose||0;
     $('#svTop',sheet).innerHTML=
       '<div class="row wrap" style="gap:8px;padding:2px 0 10px;position:sticky;top:0;background:var(--bg2);z-index:2">'+
-        (s.type!=='photo'?
-          '<div class="row" style="gap:6px"><button class="btn xs" data-v="tr-">&#9837;</button>'+
-          '<span class="chip'+(tr?' on':'')+'" style="min-width:86px;justify-content:center">'+(k?esc(k):(tr>0?'+'+tr:tr))+(k&&tr?' ('+(tr>0?'+'+tr:tr)+')':'')+'</span>'+
-          '<button class="btn xs" data-v="tr+">&#9839;</button></div>':'')+
+        '<div class="row" style="gap:6px"><button class="btn xs" data-v="tr-">&#9837;</button>'+
+        '<span class="chip'+(tr?' on':'')+'" style="min-width:86px;justify-content:center">'+(k?esc(k):(tr>0?'+'+tr:tr))+(k&&tr?' ('+(tr>0?'+'+tr:tr)+')':'')+'</span>'+
+        '<button class="btn xs" data-v="tr+">&#9839;</button></div>'+
         '<button class="btn xs" data-v="capo">Capo '+(s.capo||0)+'</button>'+
-        (s.type!=='photo'?'<button class="btn xs" data-v="font">Aa</button><button class="btn xs" data-v="scroll">&#9654; Scroll</button>':'<button class="btn xs" data-v="zoom-">-</button><button class="btn xs" data-v="zoom+">+</button>')+
+        (s.type!=='photo'
+          ? '<button class="btn xs" data-v="font">Aa</button><button class="btn xs" data-v="scroll">&#9654; Scroll</button>'
+          : '<button class="btn xs'+(pinMode?' pri':'')+'" data-v="pin">+ Chord</button><button class="btn xs" data-v="fit">Fit</button>')+
         '<button class="btn xs" data-v="mod">Modulate</button>'+
         '<div class="grow"></div><button class="btn xs" data-v="edit">Edit</button>'+
       '</div>'+
       (s.artist?'<div class="muted" style="margin:-4px 0 8px">'+esc(s.artist)+(s.capo?'  ·  capo '+s.capo+' (sounds in '+esc(transposeSym(s.key||'C',(s.transpose||0)+(s.capo||0),songPref(s)))+')':'')+'</div>':'');
   }
-  let zoom=1;
+  /* ---- photo songs : pinch-zoom / pan stages with chord pins ---- */
+  let pinMode=false, photoKeys=null, stages=[];
+  function pinsFor(key){ return (s.pins||[]).filter(p=>p.img===key); }
+  function relabelAll(){ stages.forEach(st=>st.relabel()); }
+  function pinKeyCtx(){
+    const kc=s.key?parseChord(s.key):null;
+    const ctx=kc?{keyPc:kc.pc,keyMinor:isMinorQual(kc.qual),keyName:s.key}:{};
+    ctx.title='Pin a chord';
+    return ctx;
+  }
+  function setPinMode(on){
+    pinMode=on; head();
+    const box=$('#svPhotos',sheet); if(box) box.classList.toggle('pinning',pinMode);
+    const h=$('#svHint',sheet); if(h) h.classList.toggle('on',pinMode);
+  }
+  /* what the user picks is what they see, so a pick made while the song is
+     shifted is stored back in the song's own key */
+  function placePin(key,x,y){
+    openChordPicker(n=>{
+      closeSheet();
+      const tr=s.transpose||0;
+      (s.pins=s.pins||[]).push({img:key,x:clamp(x,0,1),y:clamp(y,0,1),n:tr?transposeSym(n,-tr,songPref(s)):n});
+      saveSong(s); relabelAll(); toast('Pinned '+n);
+    },pinKeyCtx());
+  }
+  function editPin(p){
+    const tr=s.transpose||0, pref=songPref(s);
+    openChordSheet(transposeSym(p.n,tr,pref),{
+      footer:'<div class="row" style="margin-top:14px;gap:8px"><span class="muted grow">Nudge pin</span>'+
+             '<button class="btn sm" data-nudge="l">&#8592;</button><button class="btn sm" data-nudge="u">&#8593;</button>'+
+             '<button class="btn sm" data-nudge="d">&#8595;</button><button class="btn sm" data-nudge="r">&#8594;</button></div>'+
+             '<div class="row" style="margin-top:10px;gap:8px">'+
+             '<button class="btn grow" data-pin="change">Change chord</button>'+
+             '<button class="btn danger" data-pin="remove">Remove</button></div>',
+      onFooter:sh=>{
+        sh.addEventListener('click',e=>{
+          const nb=e.target.closest('[data-nudge]');
+          if(nb){
+            const d=nb.dataset.nudge, st=0.012;
+            if(d==='l') p.x=clamp(p.x-st,0,1);
+            else if(d==='r') p.x=clamp(p.x+st,0,1);
+            else if(d==='u') p.y=clamp(p.y-st,0,1);
+            else p.y=clamp(p.y+st,0,1);
+            saveSong(s); relabelAll(); return;
+          }
+          const pb=e.target.closest('[data-pin]');
+          if(!pb) return;
+          if(pb.dataset.pin==='remove'){
+            s.pins=(s.pins||[]).filter(x=>x!==p);
+            saveSong(s); closeSheet(); relabelAll(); toast('Pin removed');
+          }else{
+            openChordPicker(n=>{
+              closeSheet(); closeSheet();
+              p.n=tr?transposeSym(n,-tr,pref):n;
+              saveSong(s); relabelAll(); toast('Pin is now '+n);
+            },pinKeyCtx());
+          }
+        });
+      }
+    });
+  }
+  function photoStage(key,dataUrl){
+    const stage=el('div','phstage');
+    stage.tabIndex=0;
+    const canvas=el('div','phcanvas'), layer=el('div','phpins');
+    const img=new Image();
+    let natW=0,natH=0,sw=0,sh=0,fit=1,minZ=1,maxZ=4,z=1,tx=0,ty=0,ready=false;
+    function measure(){
+      sw=Math.max(1,stage.clientWidth);
+      const cap=Math.max(240,Math.round((window.innerHeight||640)*0.6));
+      sh=Math.max(140,Math.min(Math.round(natH*(sw/natW)),cap));
+      stage.style.height=sh+'px';
+      fit=Math.min(sw/natW,sh/natH);
+      minZ=fit; maxZ=Math.max(fit*8,2);
+    }
+    function apply(){
+      z=clamp(z,minZ,maxZ);
+      const w=natW*z,h=natH*z;
+      tx = w<=sw ? (sw-w)/2 : clamp(tx,sw-w,0);
+      ty = h<=sh ? (sh-h)/2 : clamp(ty,sh-h,0);
+      canvas.style.transform='translate3d('+tx.toFixed(2)+'px,'+ty.toFixed(2)+'px,0) scale('+z.toFixed(4)+')';
+      canvas.style.setProperty('--ipz',(1/z).toFixed(4));
+      stage.style.cursor=(w>sw+1||h>sh+1)?'grab':'default';
+    }
+    function setFit(){ z=fit; apply(); }
+    function zoomAt(sx,sy,f){
+      const nz=clamp(z*f,minZ,maxZ);
+      if(Math.abs(nz-z)<1e-6) return;
+      const ix=(sx-tx)/z, iy=(sy-ty)/z;
+      z=nz; tx=sx-ix*z; ty=sy-iy*z; apply();
+    }
+    function relabel(){
+      layer.innerHTML='';
+      const tr=s.transpose||0, pref=songPref(s);
+      pinsFor(key).forEach(p=>{
+        const btn=el('button','phpin',esc(tr?transposeSym(p.n,tr,pref):p.n));
+        btn.type='button';
+        btn.style.left=(p.x*100)+'%'; btn.style.top=(p.y*100)+'%';
+        btn._pin=p;
+        layer.appendChild(btn);
+      });
+    }
+    function pan(dx,dy){
+      if(natW*z<=sw+1 && natH*z<=sh+1){ if(body) body.scrollTop-=dy; return; }
+      tx+=dx; ty+=dy; apply();
+    }
+    const pts=new Map();
+    let pinch=null, multi=false, tapT=0, tapX=0, tapY=0;
+    function pinchStep(){
+      const a=Array.from(pts.values()); if(a.length<2) return;
+      const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1;
+      const mx=(a[0].x+a[1].x)/2, my=(a[0].y+a[1].y)/2;
+      if(pinch){
+        const r=stage.getBoundingClientRect();
+        tx+=mx-pinch.mx; ty+=my-pinch.my;
+        zoomAt(mx-r.left,my-r.top,d/pinch.d);
+      }
+      pinch={d:d,mx:mx,my:my};
+    }
+    function tap(cx,cy){
+      const r=stage.getBoundingClientRect();
+      if(pinMode){
+        const ix=(cx-r.left-tx)/z, iy=(cy-r.top-ty)/z;
+        if(ix<0||iy<0||ix>natW||iy>natH){ toast('Tap on the photo itself'); return; }
+        placePin(key,ix/natW,iy/natH);
+        return;
+      }
+      const now=Date.now();
+      if(now-tapT<330 && Math.abs(cx-tapX)<30 && Math.abs(cy-tapY)<30){
+        tapT=0;
+        if(Math.abs(z-fit)<0.005) zoomAt(cx-r.left,cy-r.top,(fit<0.98?1:fit*2.5)/z);
+        else setFit();
+        return;
+      }
+      tapT=now; tapX=cx; tapY=cy;
+    }
+    stage.addEventListener('pointerdown',e=>{
+      if(!ready||e.target.closest('.phpin')) return;
+      try{ stage.setPointerCapture(e.pointerId); }catch(err){}
+      pts.set(e.pointerId,{x:e.clientX,y:e.clientY,t:Date.now(),moved:0});
+      if(pts.size>1){ multi=true; pinch=null; }
+      e.preventDefault();
+    });
+    stage.addEventListener('pointermove',e=>{
+      const p=pts.get(e.pointerId); if(!p) return;
+      const dx=e.clientX-p.x, dy=e.clientY-p.y;
+      p.moved+=Math.abs(dx)+Math.abs(dy);
+      p.x=e.clientX; p.y=e.clientY;
+      if(pts.size>1) pinchStep(); else pan(dx,dy);
+      e.preventDefault();
+    });
+    function lift(e){
+      const p=pts.get(e.pointerId); if(!p) return;
+      pts.delete(e.pointerId);
+      if(pts.size<2) pinch=null;
+      if(pts.size) return;
+      const was=multi; multi=false;
+      if(!was && e.type==='pointerup' && p.moved<12 && Date.now()-p.t<400) tap(e.clientX,e.clientY);
+    }
+    stage.addEventListener('pointerup',lift);
+    stage.addEventListener('pointercancel',lift);
+    /* desktop fallbacks: wheel to zoom, drag to pan, keys when focused */
+    stage.addEventListener('wheel',e=>{
+      if(!ready) return;
+      e.preventDefault();
+      const r=stage.getBoundingClientRect();
+      zoomAt(e.clientX-r.left,e.clientY-r.top,Math.pow(0.9988,e.deltaY));
+    },{passive:false});
+    stage.addEventListener('keydown',e=>{
+      if(!ready) return;
+      const k=e.key, st=48;
+      if(k==='+'||k==='=') zoomAt(sw/2,sh/2,1.25);
+      else if(k==='-'||k==='_') zoomAt(sw/2,sh/2,0.8);
+      else if(k==='0') setFit();
+      else if(k==='ArrowLeft') pan(st,0);
+      else if(k==='ArrowRight') pan(-st,0);
+      else if(k==='ArrowUp') pan(0,st);
+      else if(k==='ArrowDown') pan(0,-st);
+      else if((k==='Enter'||k===' ')&&pinMode){ const r=stage.getBoundingClientRect(); tap(r.left+sw/2,r.top+sh/2); }
+      else return;
+      e.preventDefault();
+    });
+    stage.addEventListener('click',e=>{
+      const b2=e.target.closest('.phpin');
+      if(b2&&b2._pin) editPin(b2._pin);
+    });
+    function onResize(){
+      if(!stage.isConnected){ window.removeEventListener('resize',onResize); return; }
+      if(!ready) return;
+      const atFit=Math.abs(z-fit)<0.005;
+      measure(); if(atFit) z=fit; apply();
+    }
+    window.addEventListener('resize',onResize);
+    img.onload=()=>{
+      natW=img.naturalWidth||1; natH=img.naturalHeight||1;
+      canvas.style.width=natW+'px'; canvas.style.height=natH+'px';
+      ready=true; measure(); setFit();
+    };
+    img.onerror=()=>{ stage.innerHTML='<div class="empty">That photo could not be loaded.</div>'; };
+    img.draggable=false; img.alt=''; img.src=dataUrl;
+    canvas.appendChild(img); canvas.appendChild(layer); stage.appendChild(canvas);
+    return {root:stage,relabel:relabel,fit:setFit};
+  }
   async function draw(){
     head();
     const b=$('#svBody',sheet);
     if(s.type==='photo'){
-      b.innerHTML='<div id="svPhotos"></div>'+
+      const keys=(s.images||[]).join('|');
+      if(photoKeys===keys&&$('#svPhotos',sheet)){ relabelAll(); return; }
+      photoKeys=keys; stages=[];
+      b.innerHTML='<div id="svHint" class="phhint'+(pinMode?' on':'')+'">Tap a spot on the photo to drop a chord there. Tap &quot;+ Chord&quot; again when you are done.</div>'+
+        '<div id="svPhotos"'+(pinMode?' class="pinning"':'')+'></div>'+
         '<div class="row" style="margin:14px 0"><button class="btn block" data-v="addphoto">+ Add another photo</button></div>';
       const box=$('#svPhotos',sheet);
-      box.innerHTML='';
-      for(const key of s.images){
+      for(const key of (s.images||[])){
         const d=await idb.safeGet(key);
         if(!d) continue;
-        const wrap=el('div','');
-        wrap.style.cssText='margin-bottom:12px;overflow:auto;-webkit-overflow-scrolling:touch;border-radius:12px;background:#000';
-        const img=new Image(); img.src=d;
-        img.style.cssText='display:block;width:'+(zoom*100)+'%;max-width:none';
-        img.dataset.ph='1';
-        wrap.appendChild(img);
-        box.appendChild(wrap);
+        const st=photoStage(key,d);
+        stages.push(st); box.appendChild(st.root); st.relabel();
       }
-      if(!s.images.length) box.innerHTML='<div class="empty">No photos yet.</div>';
+      if(!stages.length) box.innerHTML='<div class="empty">No photos yet.</div>';
       if(s.text) box.insertAdjacentHTML('beforeend','<div class="songbody wrapmode" style="margin-top:10px">'+esc(s.text)+'</div>');
     }else{
       b.innerHTML='<div class="songbody'+(DB.settings.wrap?' wrapmode':'')+'" id="svText" style="--fs-song:'+DB.settings.songFont+'px;font-size:'+DB.settings.songFont+'px">'+songBodyHTML(s,false)+'</div>';
@@ -1609,8 +1852,8 @@ function openSongViewer(id){
     else if(v==='scroll'){ toggleAutoScroll(body,sheet); }
     else if(v==='mod'){ openModulateSheet(s,()=>{saveSong(s);draw();}); }
     else if(v==='edit'){ stopAutoScroll(); closeSheet(); setTimeout(()=>openSongEditor(s,false),120); }
-    else if(v==='zoom+'){ zoom=Math.min(4,zoom+0.25); draw(); }
-    else if(v==='zoom-'){ zoom=Math.max(0.5,zoom-0.25); draw(); }
+    else if(v==='pin'){ setPinMode(!pinMode); }
+    else if(v==='fit'){ stages.forEach(st=>st.fit()); }
     else if(v==='addphoto'){ pickImages(s,()=>draw()); }
     else if(v==='menu'){ openSongMenu(s,sheet,draw); }
   },true);
@@ -1620,6 +1863,7 @@ function openSongMenu(s,sheet,redraw){
   openSheet({title:s.title||'Untitled',body:'<div class="list-pick">'+
     '<button data-m="fav"><span class="em">'+(s.fav?'&#9733;':'&#9734;')+'</span><span><b>'+(s.fav?'Remove from favourites':'Mark as favourite')+'</b></span></button>'+
     '<button data-m="edit"><span class="em">&#9999;</span><span><b>Edit song</b></span></button>'+
+    (s.type==='photo'?'<button data-m="clearpins"><span class="em">&#119070;</span><span><b>Clear chord pins</b><small>'+((s.pins||[]).length||'No')+' chord pin'+((s.pins||[]).length===1?'':'s')+' on the photos</small></span></button>':'')+
     '<button data-m="wrap"><span class="em">&#8617;</span><span><b>'+(DB.settings.wrap?'Stop wrapping long lines':'Wrap long lines')+'</b><small>Wrapping is easier to read, but chord columns can shift</small></span></button>'+
     '<button data-m="copy"><span class="em">&#128203;</span><span><b>Copy as text</b><small>Chords above the lyrics, ready to paste anywhere</small></span></button>'+
     '<button data-m="dup"><span class="em">&#10697;</span><span><b>Duplicate</b></span></button>'+
@@ -1631,6 +1875,14 @@ function openSongMenu(s,sheet,redraw){
         if(m==='fav'){ s.fav=!s.fav; saveSong(s); closeSheet(); toast(s.fav?'Favourited':'Removed'); renderSongList(); }
         else if(m==='edit'){ closeSheet(); closeSheet(); setTimeout(()=>openSongEditor(s,false),150); }
         else if(m==='wrap'){ DB.settings.wrap=!DB.settings.wrap; dbSave(); closeSheet(); redraw(); }
+        else if(m==='clearpins'){
+          const n=(s.pins||[]).length;
+          if(!n){ toast('No pins to clear'); return; }
+          closeSheet();
+          confirmSheet('Clear chord pins?','All '+n+' chord pin'+(n===1?'':'s')+' will be removed from the photos. The photos stay.','Clear',()=>{
+            s.pins=[]; saveSong(s); redraw(); toast('Pins cleared');
+          });
+        }
         else if(m==='copy'){
           const txt=(s.title||'')+(s.artist?'\n'+s.artist:'')+'\n\n'+(s.type==='chords'?songToText(s):s.text);
           navigator.clipboard?navigator.clipboard.writeText(txt).then(()=>toast('Copied')):toast('Clipboard unavailable');
@@ -1814,7 +2066,12 @@ function openSongEditor(song,isNew){
     const p=e.target.closest('[data-p]');
     if(p){ pane=p.dataset.p; draw(); return; }
     const rm=e.target.closest('[data-rm]');
-    if(rm){ const k=rm.dataset.rm; s.images=s.images.filter(x=>x!==k); idb.del(k); drawPhotos(); return; }
+    if(rm){
+      const k=rm.dataset.rm;
+      s.images=s.images.filter(x=>x!==k);
+      s.pins=(s.pins||[]).filter(x=>x.img!==k);
+      idb.del(k); drawPhotos(); return;
+    }
     const ch=e.target.closest('.ch[data-edit]');
     if(ch){ editAnchor(+ch.dataset.l,+ch.dataset.c); return; }
     const pc=e.target.closest('.placechar');
@@ -1872,6 +2129,7 @@ function openModulateSheet(s,cb){
   const pref=songPref(s);
   const uniq=[];
   s.chords.forEach(a=>{ if(uniq.indexOf(a.n)<0) uniq.push(a.n); });
+  (s.pins||[]).forEach(p=>{ if(uniq.indexOf(p.n)<0) uniq.push(p.n); });
   const cur=s.transpose||0;
   let steps=0;
   function table(st){
@@ -2090,8 +2348,10 @@ function metroStop(){
 async function exportBackup(){
   toast('Building backup...');
   const imgs={};
-  for(const s of DB.songs) for(const k of (s.images||[])){
-    const d=await idb.safeGet(k); if(d) imgs[k]=d;
+  for(const s of DB.songs){
+    s.images=Array.isArray(s.images)?s.images:[];
+    s.pins=normPins(s.pins,s.images);
+    for(const k of s.images){ const d=await idb.safeGet(k); if(d) imgs[k]=d; }
   }
   const payload={app:'cross-guitar',version:1,exported:new Date().toISOString(),songs:DB.songs,settings:DB.settings,images:imgs};
   const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
@@ -2112,6 +2372,8 @@ $('#jsonPick').addEventListener('change',function(){
       let added=0;
       for(const s of o.songs){
         if(getSong(s.id)) s.id=uid();
+        s.images=Array.isArray(s.images)?s.images:[];
+        s.pins=normPins(s.pins,s.images);
         DB.songs.unshift(s); added++;
       }
       if(o.images) for(const k of Object.keys(o.images)) await idb.put(k,o.images[k]);
@@ -2147,7 +2409,7 @@ document.addEventListener('gesturestart',e=>e.preventDefault());
 let lastTouch=0;
 document.addEventListener('touchend',e=>{
   const now=Date.now();
-  if(now-lastTouch<300 && !e.target.closest('input,textarea,.photowrap')) e.preventDefault();
+  if(now-lastTouch<300 && !e.target.closest('input,textarea,.photowrap,.phstage')) e.preventDefault();
   lastTouch=now;
 },{passive:false});
 

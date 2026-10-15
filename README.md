@@ -18,6 +18,14 @@ ukulele), adjustable A4 calibration.
 - *Custom* — a photo of a chart, or **Create my own**: paste lyrics, then tap
   any letter to drop a chord above it.
 
+Photo songs pinch to zoom and drag to pan, and a double tap snaps between fit
+and full size — on a desktop the wheel zooms, and `+` / `-` / `0` and the arrow
+keys work once the photo has focus. Tap **+ Chord**, then tap a spot on the
+photo, to pin a chord there. A pin is stored as a point on the photo itself, so
+it holds its place at any zoom and on any screen; pins transpose with the song,
+open the usual chord diagram when tapped (change, nudge or remove them there),
+and travel in a backup.
+
 Every chord in a song is a button: tap it for the diagram, arrow through every
 other way to play it, hear it strummed. Transpose with ♭/♯, set a capo, modulate
 to a new key, auto-scroll hands free while you play.
