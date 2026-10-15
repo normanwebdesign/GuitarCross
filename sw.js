@@ -1,6 +1,6 @@
-/* Cross Guitar - offline cache.
+/* Guitar Cross - offline cache.
    Bump CACHE whenever index.html changes so phones pick up the new version. */
-const CACHE = 'cross-guitar-v2';
+const CACHE = 'guitar-cross-v3';
 const ASSETS = [
   './',
   './index.html',

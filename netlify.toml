@@ -1,4 +1,4 @@
-# Cross Guitar - static site, nothing to build.
+# Guitar Cross - static site, nothing to build.
 # The whole app is index.html; sw.js makes it work offline once installed.
 
 [build]

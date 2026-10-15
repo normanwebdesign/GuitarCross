@@ -1,6 +1,6 @@
 {
-  "name": "Cross Guitar",
-  "short_name": "Cross Guitar",
+  "name": "Guitar Cross",
+  "short_name": "Guitar Cross",
   "description": "Offline guitar tuner, song book and chord dictionary.",
   "start_url": "./index.html",
   "scope": "./",

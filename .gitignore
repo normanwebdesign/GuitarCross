@@ -2,6 +2,7 @@
 .netlify/
 
 # Backups exported from the app - keep these out of the repo
+guitar-cross-backup-*.json
 cross-guitar-backup-*.json
 
 # OS / editor noise

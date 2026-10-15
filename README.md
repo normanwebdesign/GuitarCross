@@ -1,4 +1,4 @@
-# Cross Guitar
+# Guitar Cross
 
 An offline guitar tuner, song book and chord dictionary for iPhone and iPad.
 No accounts, no network calls, no libraries — `index.html` is the whole app.
@@ -29,6 +29,11 @@ and travel in a backup.
 Every chord in a song is a button: tap it for the diagram, arrow through every
 other way to play it, hear it strummed. Transpose with ♭/♯, set a capo, modulate
 to a new key, auto-scroll hands free while you play.
+
+**Full screen** puts the whole song on one screen with nothing to scroll: whole
+verses flow into columns and the type is set as large as it will go while still
+fitting. It re-fits when you turn the iPad, and the column count can be forced
+if you prefer a particular layout. Chords stay tappable and ♭/♯ still work.
 
 **Chords** — the dictionary. Search (`C#m7`, `Bbsus4`, `F#m7b5`), or browse by
 root and quality. Every chord shows its standard shape first, then alternatives

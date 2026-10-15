@@ -6,11 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Cross Guitar">
+<meta name="apple-mobile-web-app-title" content="Guitar Cross">
 <meta name="theme-color" content="#0b0f14">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>Cross Guitar</title>
+<title>Guitar Cross</title>
 <style>
 :root{
   --bg:#0b0f14; --bg2:#111823; --card:#161e29; --card2:#1c2634; --line:#27323f;
@@ -186,6 +186,27 @@ label.fld span{display:block;font-size:12px;color:var(--dim);margin-bottom:5px;f
   padding-bottom:30px;
 }
 .songbody.wrapmode{white-space:pre-wrap;overflow-x:visible;overflow-wrap:break-word}
+
+/* ---------- full screen : the whole song on one page ---------- */
+.fitwrap{
+  /* same layer as the sheets: it opens after the song sheet so it covers it,
+     and a chord sheet opened from here lands on top in turn */
+  position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.fitbar{flex:none;display:flex;align-items:center;gap:7px;padding:6px 10px;border-bottom:1px solid var(--line)}
+.fitbar .ttl{
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:13px;font-weight:650;color:var(--dim);
+}
+.fitbody{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding:8px 12px 10px}
+.fitcols{
+  height:100%;column-gap:26px;column-rule:1px solid var(--line);
+  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  line-height:1.34;white-space:pre;
+}
+.fitblk{break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid;margin:0 0 1.15em}
+.fitblk:last-child{margin-bottom:0}
 .chordline{color:var(--accent);font-weight:700}
 .ch{color:var(--accent);font-weight:700;padding:3px 4px;margin:-3px -4px;border-radius:5px}
 .ch:active{background:rgba(30,217,138,.22)}
@@ -277,7 +298,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;heigh
   <section id="view-tuner" class="view active">
     <div class="bar">
       <div class="grow">
-        <h1>Cross Guitar</h1>
+        <h1>Guitar Cross</h1>
         <div class="sub" id="tuningName">Standard &middot; E A D G B E</div>
       </div>
       <button class="btn sm" id="btnTuningPick">Tuning</button>
@@ -375,7 +396,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;heigh
 <script>
 'use strict';
 /* =====================================================================
-   CROSS GUITAR  -  offline guitar tuner + song book + chord dictionary
+   GUITAR CROSS  -  offline guitar tuner + song book + chord dictionary
    Single file. No libraries. All data stays on the device.
    ===================================================================== */
 
@@ -390,6 +411,8 @@ let toastT=null;
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),1700);}
 
 /* ------------------------- storage ------------------------- */
+/* storage keys keep their original spelling so songs saved before the
+   app was renamed to Guitar Cross still load */
 const LS_KEY='crossguitar.v1';
 const DB={
   songs:[],
@@ -630,7 +653,10 @@ function fingeringFor(frets){
   const min=fretsMin(frets);
   const fingers=frets.map(()=>0);
   let barre=null;
-  if(min>0){
+  /* nobody barres a chord that has open strings ringing in it - Em is 022000
+     with two fingers, not a barre at the 2nd fret */
+  const hasOpen=frets.indexOf(0)>=0;
+  if(min>0&&!hasOpen){
     const at=[];
     for(let i=0;i<frets.length;i++) if(frets[i]===min) at.push(i);
     const higher=frets.filter(f=>f>min).length;
@@ -1466,6 +1492,23 @@ function songBodyHTML(s,editable){
   });
   return html||'<div class="empty">This song has no text yet. Tap Edit to add some.</div>';
 }
+/* the same song, grouped into blocks at the blank lines, so full screen can
+   flow whole verses into columns instead of splitting one down the middle */
+function songBlocksHTML(s){
+  const pref=songPref(s);
+  const lines=s.text.split(/\r?\n/);
+  const blocks=[];
+  let buf='';
+  lines.forEach((line,i)=>{
+    const anchors=s.chords.filter(a=>a.l===i);
+    if(line.trim()===''&&!anchors.length){ if(buf){blocks.push(buf);buf='';} return; }
+    if(anchors.length) buf+='<div class="chordline">'+chordRowHTML(anchors,pref,s.transpose||0,i,false)+'</div>';
+    buf+=SECT_RE.test(line)?'<div class="sect">'+esc(line)+'</div>'
+                           :'<div>'+(line===''?'&nbsp;':esc(line))+'</div>';
+  });
+  if(buf) blocks.push(buf);
+  return blocks.map(b=>'<div class="fitblk">'+b+'</div>').join('');
+}
 
 /* ==================================================================
    SONG LIST
@@ -1600,7 +1643,8 @@ function openSongViewer(id){
         '<button class="btn xs" data-v="tr+">&#9839;</button></div>'+
         '<button class="btn xs" data-v="capo">Capo '+(s.capo||0)+'</button>'+
         (s.type!=='photo'
-          ? '<button class="btn xs" data-v="font">Aa</button><button class="btn xs" data-v="scroll">&#9654; Scroll</button>'
+          ? '<button class="btn xs" data-v="font">Aa</button><button class="btn xs" data-v="scroll">&#9654; Scroll</button>'+
+            '<button class="btn xs" data-v="full">&#9974; Full screen</button>'
           : '<button class="btn xs'+(pinMode?' pri':'')+'" data-v="pin">+ Chord</button><button class="btn xs" data-v="fit">Fit</button>')+
         '<button class="btn xs" data-v="mod">Modulate</button>'+
         '<div class="grow"></div><button class="btn xs" data-v="edit">Edit</button>'+
@@ -1850,6 +1894,7 @@ function openSongViewer(id){
     else if(v==='capo'){ openCapoSheet(s,()=>{saveSong(s);draw();}); }
     else if(v==='font'){ openFontSheet(()=>draw()); }
     else if(v==='scroll'){ toggleAutoScroll(body,sheet); }
+    else if(v==='full'){ openFitScreen(s,draw); }
     else if(v==='mod'){ openModulateSheet(s,()=>{saveSong(s);draw();}); }
     else if(v==='edit'){ stopAutoScroll(); closeSheet(); setTimeout(()=>openSongEditor(s,false),120); }
     else if(v==='pin'){ setPinMode(!pinMode); }
@@ -1931,6 +1976,114 @@ function openCapoSheet(s,cb){
     out();
   }});
 }
+/* ==================================================================
+   FULL SCREEN
+   The whole song at once: verses flow into columns, and the type size is
+   chosen as large as it can be while everything still fits the screen.
+   ================================================================== */
+function openFitScreen(s,onUpdate){
+  stopAutoScroll();
+  let colPref='auto', fitT=null;
+  const wrap=el('div','fitwrap');
+  wrap.innerHTML=
+    '<div class="fitbar">'+
+      '<button class="btn xs" data-f="close">&#10005;</button>'+
+      '<span class="ttl"></span>'+
+      '<button class="btn xs" data-f="tr-">&#9837;</button>'+
+      '<button class="btn xs" data-f="tr+">&#9839;</button>'+
+      '<button class="btn xs" data-f="cols">Auto</button>'+
+    '</div>'+
+    '<div class="fitbody"><div class="fitcols"></div></div>';
+  document.body.appendChild(wrap);
+  const cols=$('.fitcols',wrap), box=$('.fitbody',wrap);
+
+  function fits(){
+    return cols.scrollWidth<=cols.clientWidth+1 && cols.scrollHeight<=cols.clientHeight+1;
+  }
+  /* biggest type size that still fits at this column count */
+  function bestSizeFor(n){
+    cols.style.columnCount=n;
+    cols.style.lineHeight='1.34';
+    let lo=6,hi=46,ok=0;
+    for(let i=0;i<9;i++){
+      const mid=(lo+hi)/2;
+      cols.style.fontSize=mid.toFixed(2)+'px';
+      if(fits()){ ok=mid; lo=mid; } else hi=mid;
+    }
+    return ok;
+  }
+  function fit(){
+    const w=box.clientWidth;
+    const hi = colPref==='auto' ? (w>1000?4:(w>680?3:2)) : colPref;
+    const lo = colPref==='auto' ? 1 : colPref;
+    let best={n:lo,size:0};
+    for(let n=lo;n<=hi;n++){
+      const size=bestSizeFor(n);
+      if(size>best.size+0.4) best={n:n,size:size};   /* only switch for a real gain */
+    }
+    cols.style.columnCount=best.n;
+    cols.style.lineHeight='1.34';
+    cols.style.fontSize=(best.size||7).toFixed(2)+'px';
+    /* long lines usually cap the type size before the page is full, so open the
+       line spacing out into whatever height is left over */
+    let llo=1.34,lhi=2.6,lok=1.34;
+    for(let i=0;i<7;i++){
+      const mid=(llo+lhi)/2;
+      cols.style.lineHeight=mid.toFixed(3);
+      if(fits()){ lok=mid; llo=mid; } else lhi=mid;
+    }
+    cols.style.lineHeight=lok.toFixed(3);
+    $('[data-f="cols"]',wrap).textContent =
+      colPref==='auto' ? 'Auto · '+best.n : best.n+(best.n>1?' cols':' col');
+  }
+  function draw(){
+    $('.ttl',wrap).textContent=[s.title||'Untitled',
+      songKeyDisplay(s)?'Key '+songKeyDisplay(s):'',
+      s.capo?'Capo '+s.capo:''].filter(Boolean).join('  ·  ');
+    cols.innerHTML=songBlocksHTML(s);
+    fit();
+  }
+  function close(){
+    window.removeEventListener('resize',onResize);
+    window.removeEventListener('orientationchange',onResize);
+    document.removeEventListener('keydown',onKey);
+    if(document.fullscreenElement&&document.exitFullscreen){ document.exitFullscreen().catch(()=>{}); }
+    wrap.remove();
+    if(onUpdate) onUpdate();
+  }
+  function onResize(){ clearTimeout(fitT); fitT=setTimeout(fit,160); }
+  function onKey(e){ if(e.key==='Escape') close(); }
+  window.addEventListener('resize',onResize);
+  window.addEventListener('orientationchange',onResize);
+  document.addEventListener('keydown',onKey);
+
+  wrap.addEventListener('click',e=>{
+    const ch=e.target.closest('.ch');
+    if(ch){
+      const a=s.chords.filter(x=>x.l===+ch.dataset.l&&x.c===+ch.dataset.c)[0];
+      if(a) openChordSheet(transposeSym(a.n,s.transpose||0,songPref(s)));
+      return;
+    }
+    const b=e.target.closest('[data-f]'); if(!b) return;
+    const f=b.dataset.f;
+    if(f==='close') close();
+    else if(f==='tr+'||f==='tr-'){
+      s.transpose=((s.transpose||0)+(f==='tr+'?1:-1));
+      if(s.transpose>11)s.transpose-=12; if(s.transpose<-11)s.transpose+=12;
+      saveSong(s); draw();
+    }
+    else if(f==='cols'){
+      const order=['auto',1,2,3,4];
+      colPref=order[(order.indexOf(colPref)+1)%order.length];
+      fit();
+    }
+  });
+  /* real full screen where the browser offers it; on a Home Screen app the
+     page is already full screen and this is simply skipped */
+  if(wrap.requestFullscreen){ wrap.requestFullscreen().catch(()=>{}); }
+  draw();
+}
+
 /* --- auto scroll --- */
 function toggleAutoScroll(body,sheet){
   if(autoScroll.on){ stopAutoScroll(); return; }
@@ -2353,11 +2506,11 @@ async function exportBackup(){
     s.pins=normPins(s.pins,s.images);
     for(const k of s.images){ const d=await idb.safeGet(k); if(d) imgs[k]=d; }
   }
-  const payload={app:'cross-guitar',version:1,exported:new Date().toISOString(),songs:DB.songs,settings:DB.settings,images:imgs};
+  const payload={app:'guitar-cross',version:1,exported:new Date().toISOString(),songs:DB.songs,settings:DB.settings,images:imgs};
   const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url; a.download='cross-guitar-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  a.href=url; a.download='guitar-cross-backup-'+new Date().toISOString().slice(0,10)+'.json';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),4000);
   toast('Backup saved');
@@ -2368,7 +2521,7 @@ $('#jsonPick').addEventListener('change',function(){
   fr.onload=async()=>{
     try{
       const o=JSON.parse(fr.result);
-      if(!o.songs) throw new Error('Not a Cross Guitar backup');
+      if(!o.songs) throw new Error('Not a Guitar Cross backup');
       let added=0;
       for(const s of o.songs){
         if(getSong(s.id)) s.id=uid();

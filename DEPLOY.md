@@ -1,4 +1,4 @@
-# Deploying Cross Guitar to Netlify
+# Deploying Guitar Cross to Netlify
 
 Netlify gives the app the one thing it cannot get from a file on your phone:
 **https**. That is what lets iOS hand the microphone to the tuner. Everything
@@ -12,41 +12,37 @@ as-is, and sets the headers the app needs.
 ## Option A - drag and drop (two minutes, no git)
 
 1. Go to <https://app.netlify.com/drop>.
-2. Drag the whole **Cross Guitar** folder onto the page.
+2. Drag the whole **GuitarCross** folder onto the page.
 3. Netlify gives you an address like `https://cheerful-pie-123abc.netlify.app`.
 4. Open it in Safari on your phone → Share → **Add to Home Screen**.
 
 Good for trying it out. To publish a change you drag the folder again, which
 creates a new address unless you link the drop to an existing site.
 
-## Option B - connect a git repo (what you want long term)
+## Option B - connect the git repo (what you want long term)
 
-The repo is already initialised here with everything committed.
-
-1. Create an empty repository on GitHub (no README, no .gitignore - this folder
-   has both).
-2. Point this folder at it and push:
+This folder is the clone of **github.com/normanwebdesign/GuitarCross** and the
+remote is already set, so the whole history just needs pushing:
 
 ```bash
-git remote add origin https://github.com/<you>/cross-guitar.git
 git push -u origin main
 ```
 
-3. In Netlify: **Add new site → Import an existing project → GitHub**, pick the
-   repository.
-4. Leave the build command **empty** and the publish directory as **`.`** -
-   `netlify.toml` already says this, so the defaults it shows should be right.
-5. Deploy. Every `git push` from now on redeploys the site.
+Then in Netlify: **Add new site → Import an existing project → GitHub**, pick
+**GuitarCross**. Leave the build command **empty** and the publish directory as
+**`.`** - `netlify.toml` already says this, so the defaults it offers should be
+right. Every `git push` from then on redeploys the site.
 
 ## Option C - Netlify CLI (fastest here)
 
 The CLI is already installed on this machine and you are already logged in as
 `jordanbabb@normanwebdesign.com`. This folder just is not linked to a site yet.
+Use this if you would rather not go through GitHub.
 
 First time - create the site and publish it in one go:
 
 ```bash
-netlify sites:create --name cross-guitar
+netlify sites:create --name guitar-cross
 ```
 
 ```bash
@@ -68,8 +64,8 @@ netlify link
 ## After the first deploy
 
 **Rename the site** so the address is something you can type: Site configuration
-→ Site details → Change site name, e.g. `cross-guitar` →
-`https://cross-guitar.netlify.app`.
+→ Site details → Change site name, e.g. `guitar-cross` →
+`https://guitar-cross.netlify.app`.
 
 **Add it to your phone.** Safari → the address → Share → Add to Home Screen. It
 launches full screen with no address bar and runs with no signal.
@@ -92,7 +88,7 @@ git push
 If you edited `index.html`, **bump the cache name in `sw.js`** first:
 
 ```js
-const CACHE = 'cross-guitar-v2';   // v1 -> v2
+const CACHE = 'guitar-cross-v4';   // v3 -> v4
 ```
 
 That is what tells an installed phone to throw away the old copy. Without it,
