@@ -1,0 +1,58 @@
+# Cross Guitar - static site, nothing to build.
+# The whole app is index.html; sw.js makes it work offline once installed.
+
+[build]
+  publish = "."
+
+# ---------------------------------------------------------------------------
+# Caching
+#
+# The page and the service worker must never be served stale, or a phone that
+# already installed the app keeps running the old version forever. The icons
+# never change under the same name, so they can be cached hard.
+# ---------------------------------------------------------------------------
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# ---------------------------------------------------------------------------
+# Security
+#
+# The app loads nothing from anywhere else, so it can be locked to its own
+# origin. blob: and data: stay allowed - photos are stored as data URLs and
+# the backup export hands you a blob. The microphone must stay allowed on this
+# origin or the tuner cannot listen.
+# ---------------------------------------------------------------------------
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "microphone=(self), camera=(self), geolocation=()"
+    Content-Security-Policy = "default-src 'self' blob: data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"

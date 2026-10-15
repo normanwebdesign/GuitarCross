@@ -1,0 +1,17 @@
+# Netlify CLI
+.netlify/
+
+# Backups exported from the app - keep these out of the repo
+cross-guitar-backup-*.json
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.vscode/
+.idea/
+
+# Nothing here needs a build, but just in case
+node_modules/
+*.log

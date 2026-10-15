@@ -1,0 +1,5 @@
+# Keep LF in the repo and in the working copy - this deploys to a Linux host
+# and the app is one big HTML file that should not churn on line endings.
+* text=auto eol=lf
+
+*.png binary
