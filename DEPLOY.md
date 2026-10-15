@@ -38,14 +38,30 @@ git push -u origin main
    `netlify.toml` already says this, so the defaults it shows should be right.
 5. Deploy. Every `git push` from now on redeploys the site.
 
-## Option C - Netlify CLI
+## Option C - Netlify CLI (fastest here)
+
+The CLI is already installed on this machine and you are already logged in as
+`jordanbabb@normanwebdesign.com`. This folder just is not linked to a site yet.
+
+First time - create the site and publish it in one go:
 
 ```bash
-npm install -g netlify-cli
-netlify deploy --prod
+netlify sites:create --name cross-guitar
 ```
 
-Answer the prompts; publish directory is `.`.
+```bash
+netlify deploy --prod --dir .
+```
+
+`sites:create` asks which team to put it under (**Better Website** or
+**norman web design's team**) and links this folder to the new site. After that,
+`netlify deploy --prod --dir .` is all it takes to publish a change.
+
+To link this folder to a site that already exists instead:
+
+```bash
+netlify link
+```
 
 ---
 
